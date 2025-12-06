@@ -6,7 +6,7 @@
 
     <groupId>net.thanachot</groupId>
     <artifactId>CanMobSpawnHere</artifactId>
-    <version>1.0.0</version>
+    <version>1.21.10-0.0.1-alpha</version>
     <packaging>jar</packaging>
 
     <name>CanMobSpawnHere</name>
