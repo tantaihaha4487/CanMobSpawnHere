@@ -1,0 +1,4 @@
+name: CanMobSpawnHere
+version: '1.0.0'
+main: net.thanachot.canMobSpawnHere.CanMobSpawnHere
+api-version: '1.21'
