@@ -39,13 +39,8 @@ public class SpawnCheckTask extends BukkitRunnable {
             if (player == null || !player.isOnline())
                 continue;
 
-            ItemStack mainHand = player.getInventory().getItemInMainHand();
-            ItemStack offHand = player.getInventory().getItemInOffHand();
-
             // Bukkit guarantees non-null ItemStack; simplify checks
-            boolean holdingLight = plugin.isLightSource(mainHand.getType()) || plugin.isLightSource(offHand.getType());
-
-            if (holdingLight) {
+            if (shouldShowSpawnChecks(player)) {
                 checkAndShowSpawnableBlocks(player);
             } else {
                 // Clear any previous highlights for this player so next time they hold an item
@@ -53,6 +48,27 @@ public class SpawnCheckTask extends BukkitRunnable {
                 previousHighlights.remove(player.getUniqueId());
             }
         }
+    }
+
+    private boolean shouldShowSpawnChecks(Player player) {
+        ItemStack mainHand = player.getInventory().getItemInMainHand();
+        ItemStack offHand = player.getInventory().getItemInOffHand();
+        boolean holdingLight = plugin.isLightSource(mainHand.getType()) || plugin.isLightSource(offHand.getType());
+
+        if (plugin.getSpawnAbility() != null) {
+            boolean active = plugin.getSpawnAbility().isActive(player);
+            if (active && !holdingLight) {
+                // Player was active but switched item; force deactivate
+                plugin.getSpawnAbility().onDeactivate(player);
+                return false;
+            }
+            // If active and holding light, show checks.
+            // also allow just holding light if ability is null? No, if ability exists usage
+            // is mandatory?
+            // Assuming ability usage is mandatory if it exists.
+            return active;
+        }
+        return holdingLight;
     }
 
     // Public wrapper so event listener can trigger a scan around a specific block
@@ -98,10 +114,7 @@ public class SpawnCheckTask extends BukkitRunnable {
         for (UUID uuid : playersToRefresh) {
             Player p = plugin.getServer().getPlayer(uuid);
             if (p != null && p.isOnline()) {
-                ItemStack mh = p.getInventory().getItemInMainHand();
-                ItemStack oh = p.getInventory().getItemInOffHand();
-                boolean holdingLight = plugin.isLightSource(mh.getType()) || plugin.isLightSource(oh.getType());
-                if (holdingLight)
+                if (shouldShowSpawnChecks(p))
                     checkAndShowSpawnableBlocks(p);
             }
         }
@@ -112,11 +125,9 @@ public class SpawnCheckTask extends BukkitRunnable {
             if (player == null || !player.isOnline())
                 continue;
 
-            // only update players who are holding light-producing items
-            ItemStack mainHand = player.getInventory().getItemInMainHand();
-            ItemStack offHand = player.getInventory().getItemInOffHand();
-            boolean holdingLight = plugin.isLightSource(mainHand.getType()) || plugin.isLightSource(offHand.getType());
-            if (!holdingLight)
+            // only update players who are holding light-producing items AND have ability
+            // active
+            if (!shouldShowSpawnChecks(player))
                 continue;
 
             // if the changedBlock is within horizontal/vertical bounds of the player,
@@ -146,18 +157,16 @@ public class SpawnCheckTask extends BukkitRunnable {
                 for (int y = Y_MIN; y <= Y_MAX; y++) {
                     Block block = origin.getRelative(x, y, z);
 
-                    // Check if spawnable at night (block light only, ignoring sky light)
+                    // Check spawn logic
                     boolean spawnableAtNight = SpawnUtils.isSpawnableAtNight(block);
-                    // Check if currently spawnable (current light conditions)
                     boolean currentlySpawnable = SpawnUtils.isSpawnable(block);
 
-                    // In night simulation mode, show blocks that WOULD be spawnable at night
-                    // Otherwise, only show currently spawnable blocks
+                    // If night mode is on, show blocks spawnable at night. Otherwise only current
+                    // spawnable blocks.
                     boolean shouldHighlight = nightMode ? spawnableAtNight : currentlySpawnable;
 
                     if (shouldHighlight) {
                         Block spawnPos = block.getRelative(0, 1, 0);
-                        // Use block light for determining danger level (ignores sky light)
                         int blockLight = spawnPos.getLightFromBlocks();
 
                         String coordKey = makeKey(spawnPos);
@@ -166,14 +175,11 @@ public class SpawnCheckTask extends BukkitRunnable {
                         Map<String, Integer> prev = previousHighlights.get(player.getUniqueId());
                         Integer prevLight = (prev == null) ? null : prev.get(coordKey);
 
-                        // Spawn if newly highlighted or if light level changed since last run
+                        // Spawn if newly highlighted or if light level changed
                         if (prevLight == null || !prevLight.equals(blockLight)) {
                             spawnHighlightParticle(player, spawnPos, currentlySpawnable);
                         } else {
-                            // Still spawn occasionally to keep particle visible while the player holds the
-                            // item
-                            // but we can do a lower-frequency refresh when nothing changed: spawn ~25% of
-                            // the time
+                            // Maintain particle visibility with lower frequency refresh (~25%)
                             if (Math.random() < 0.25) {
                                 spawnHighlightParticle(player, spawnPos, currentlySpawnable);
                             }
@@ -183,7 +189,7 @@ public class SpawnCheckTask extends BukkitRunnable {
             }
         }
 
-        // Replace previous highlights with current for next comparison
+        // update cache
         previousHighlights.put(player.getUniqueId(), currentHighlights);
     }
 
@@ -200,15 +206,13 @@ public class SpawnCheckTask extends BukkitRunnable {
      *                           can only spawn at night (yellow).
      */
     private void spawnHighlightParticle(Player player, Block block, boolean currentlySpawnable) {
-        // Red = currently spawnable (dangerous now!)
-        // Yellow = spawnable at night only (will be dangerous at night)
+        // Red = currently spawnable, Yellow = spawnable at night
         Color particleColor = currentlySpawnable
-                ? Color.fromRGB(255, 0, 0) // Red - danger now!
-                : Color.fromRGB(255, 200, 0); // Yellow/Orange - danger at night
+                ? Color.fromRGB(255, 0, 0)
+                : Color.fromRGB(255, 200, 0);
 
-        // Spawn the particle centered at the spawn position (mob feet) so it's visually
-        // over the spot
-        player.spawnParticle(Particle.DUST, block.getLocation().add(0.5, 0.0, 0.5), 6,
+        // Spawn the particle centered at the spawn position (mob feet)
+        player.spawnParticle(Particle.DUST, block.getLocation().add(0.5, 0.2, 0.5), 6,
                 new Particle.DustOptions(particleColor, 0.9f));
     }
 }

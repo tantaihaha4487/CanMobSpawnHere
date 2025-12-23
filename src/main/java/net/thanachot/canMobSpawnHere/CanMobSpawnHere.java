@@ -13,24 +13,34 @@ public final class CanMobSpawnHere extends JavaPlugin {
 
     private final Set<Material> lightSources = new HashSet<>();
 
-    // Keep a reference to the scheduled task so event listeners can trigger
-    // immediate scans
+    // Keep reference to trigger immediate scans
     private SpawnCheckTask spawnTask;
 
-    // When true, simulate night time conditions to show where mobs WOULD spawn at
-    // night
+    private net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility spawnAbility;
+
+    // Default to night simulation mode
     private boolean simulateNightTime = true;
 
     @Override
     public void onEnable() {
-        // Plugin startup logic
         populateLightSources();
         this.spawnTask = new SpawnCheckTask(this);
         this.spawnTask.runTaskTimer(this, 0L, 4L);
 
-        // Register block change listener to update highlights immediately when light
-        // sources are placed/removed
+        // Register block change listener
         getServer().getPluginManager().registerEvents(new BlockChangeListener(this), this);
+
+        // Register Ability
+        try {
+            net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility ability = new net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility(
+                    this);
+            net.thanachot.shiroverse.api.ability.AbilityManager.getOrThrow().registerAbility(ability);
+            this.spawnAbility = ability;
+            getLogger().info("Registered SpawnCheckAbility successfully.");
+        } catch (Throwable e) {
+            getLogger().warning("Failed to register SpawnCheckAbility (ShiroCore might be missing): " + e.getMessage());
+            this.spawnAbility = null;
+        }
     }
 
     @Override
@@ -40,6 +50,10 @@ public final class CanMobSpawnHere extends JavaPlugin {
 
     public SpawnCheckTask getSpawnTask() {
         return spawnTask;
+    }
+
+    public net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility getSpawnAbility() {
+        return spawnAbility;
     }
 
     private void populateLightSources() {
