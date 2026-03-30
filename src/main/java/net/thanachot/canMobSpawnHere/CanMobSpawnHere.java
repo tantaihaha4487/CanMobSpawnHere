@@ -1,7 +1,13 @@
 package net.thanachot.canMobSpawnHere;
 
+import net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility;
 import net.thanachot.canMobSpawnHere.listener.BlockChangeListener;
+import net.thanachot.canMobSpawnHere.listener.PlayerStateListener;
+import net.thanachot.canMobSpawnHere.render.ParticleHighlighter;
+import net.thanachot.canMobSpawnHere.service.HighlightCache;
+import net.thanachot.canMobSpawnHere.service.SpawnCheckService;
 import net.thanachot.canMobSpawnHere.task.SpawnCheckTask;
+import net.thanachot.shiroverse.api.ability.AbilityManager;
 import org.bukkit.Material;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -16,7 +22,8 @@ public final class CanMobSpawnHere extends JavaPlugin {
     // Keep reference to trigger immediate scans
     private SpawnCheckTask spawnTask;
 
-    private net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility spawnAbility;
+    private SpawnCheckAbility spawnAbility;
+    private SpawnCheckService spawnCheckService;
 
     // Default to night simulation mode
     private boolean simulateNightTime = true;
@@ -24,23 +31,15 @@ public final class CanMobSpawnHere extends JavaPlugin {
     @Override
     public void onEnable() {
         populateLightSources();
+        this.spawnCheckService = new SpawnCheckService(this, new HighlightCache(), new ParticleHighlighter());
         this.spawnTask = new SpawnCheckTask(this);
         this.spawnTask.runTaskTimer(this, 0L, 4L);
 
-        // Register block change listener
         getServer().getPluginManager().registerEvents(new BlockChangeListener(this), this);
+        getServer().getPluginManager().registerEvents(new PlayerStateListener(this), this);
 
-        // Register Ability
-        try {
-            net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility ability = new net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility(
-                    this);
-            net.thanachot.shiroverse.api.ability.AbilityManager.getOrThrow().registerAbility(ability);
-            this.spawnAbility = ability;
-            getLogger().info("Registered SpawnCheckAbility successfully.");
-        } catch (Throwable e) {
-            getLogger().warning("Failed to register SpawnCheckAbility (ShiroCore might be missing): " + e.getMessage());
-            this.spawnAbility = null;
-        }
+        this.spawnAbility = new SpawnCheckAbility(this);
+        AbilityManager.getOrThrow().registerAbility(spawnAbility);
     }
 
     @Override
@@ -52,8 +51,12 @@ public final class CanMobSpawnHere extends JavaPlugin {
         return spawnTask;
     }
 
-    public net.thanachot.canMobSpawnHere.ability.SpawnCheckAbility getSpawnAbility() {
+    public SpawnCheckAbility getSpawnAbility() {
         return spawnAbility;
+    }
+
+    public SpawnCheckService getSpawnCheckService() {
+        return spawnCheckService;
     }
 
     private void populateLightSources() {
